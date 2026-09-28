@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 
 export const runtime = "nodejs";
 
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   const offsetPxY = (centerYf - centerTileY) * TILE_SIZE;
 
   const half = Math.ceil(size / TILE_SIZE / 2) + 1;
-  const composites: sharp.OverlayOptions[] = [];
+  const composites: OverlayOptions[] = [];
   for (let dx = -half; dx <= half; dx++) {
     for (let dy = -half; dy <= half; dy++) {
       const buf = await fetchTile(zoom, centerTileX + dx, centerTileY + dy);
