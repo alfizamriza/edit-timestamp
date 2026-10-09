@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import "leaflet/dist/leaflet.css";
 
@@ -9,6 +9,19 @@ const MapPicker = dynamic(() => import("./MapPicker"), { ssr: false });
 
 type StampStyle = "gps" | "classic" | "modern" | "minimal";
 type StampPos = "tl" | "tr" | "bl" | "br";
+
+const FONTS = [
+  { id: "poppins", label: "Poppins", css: '"Poppins", sans-serif', weight: 700 },
+  { id: "roboto", label: "Roboto", css: '"Roboto", sans-serif', weight: 700 },
+  { id: "system", label: "Sistem (iPhone/Android)", css: 'system-ui, -apple-system, "Segoe UI", sans-serif', weight: 700 },
+  { id: "montserrat", label: "Montserrat", css: '"Montserrat", sans-serif', weight: 700 },
+  { id: "oswald", label: "Oswald", css: '"Oswald", sans-serif', weight: 600 },
+  { id: "robotomono", label: "Roboto Mono", css: '"Roboto Mono", monospace', weight: 700 },
+  { id: "digital", label: "Digital", css: '"Share Tech Mono", monospace', weight: 400 },
+] as const;
+type FontId = (typeof FONTS)[number]["id"];
+const FONTS_HREF =
+  "https://fonts.googleapis.com/css2?family=Poppins:wght@700&family=Roboto:wght@700&family=Montserrat:wght@700&family=Oswald:wght@600&family=Roboto+Mono:wght@700&family=Share+Tech+Mono&display=swap";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 // Fallback center kalau geolocation ditolak/gagal: Banda Aceh.
@@ -65,7 +78,31 @@ function wrapLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 
 export default function StempelWaktu() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [dtValue, setDtValue] = useState<string>(nowLocalSeconds());
+  // Tanggal + jam/menit/detik dipisah supaya detik bisa diatur manual di semua perangkat
+  // (picker datetime-local di iPhone tidak menyediakan detik).
+  const [dateStr, setDateStr] = useState("");
+  const [hh, setHh] = useState("");
+  const [mm, setMm] = useState("");
+  const [ss, setSs] = useState("");
+  const pad2 = (v: string) => (v === "" ? "00" : v.padStart(2, "0"));
+  const dtValue = dateStr ? `${dateStr}T${pad2(hh)}:${pad2(mm)}:${pad2(ss)}` : "";
+
+  const setNow = useCallback(() => {
+    const n = nowLocalSeconds(); // yyyy-MM-ddTHH:mm:ss
+    setDateStr(n.slice(0, 10));
+    setHh(n.slice(11, 13));
+    setMm(n.slice(14, 16));
+    setSs(n.slice(17, 19));
+  }, []);
+  // Diisi di client setelah mount (hindari mismatch hydration karena detik berubah).
+  useEffect(() => {
+    setNow();
+  }, [setNow]);
+
+  const onTimePart = (setter: (v: string) => void, max: number) => (e: ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
+    setter(digits !== "" && Number(digits) > max ? String(max) : digits);
+  };
 
   const [jalan, setJalan] = useState("");
   const [kota, setKota] = useState("");
@@ -83,6 +120,8 @@ export default function StempelWaktu() {
   const [pos, setPos] = useState<StampPos>("tr");
   const [color, setColor] = useState("#f2a93b");
   const [scale, setScale] = useState(1);
+  const [fontId, setFontId] = useState<FontId>("poppins");
+  const fontDef = FONTS.find((f) => f.id === fontId) ?? FONTS[0];
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -192,7 +231,7 @@ export default function StempelWaktu() {
     if (style === "gps") {
       const fs = Math.round(24 * base * scale);
       const lineGap = Math.round(fs * 1.3);
-      ctx.font = `700 ${fs}px Poppins, sans-serif`;
+      ctx.font = `${fontDef.weight} ${fs}px ${fontDef.css}`;
       ctx.textBaseline = "top";
       const maxWidth = canvas.width * 0.62;
       const wrapped: string[] = [];
@@ -243,7 +282,7 @@ export default function StempelWaktu() {
     const fs = Math.round(20 * base * scale);
     const padIn = Math.round(16 * base * scale);
     const lineGap = Math.round(fs * 1.35);
-    ctx.font = `${style === "minimal" ? 600 : 700} ${fs}px "JetBrains Mono", monospace`;
+    ctx.font = `${fontDef.weight} ${fs}px ${fontDef.css}`;
     ctx.textBaseline = "top";
     const widths = lines.map((l) => ctx.measureText(l).width);
     const boxW = Math.max(...widths) + padIn * 2;
@@ -283,7 +322,7 @@ export default function StempelWaktu() {
         ctx.fillText(l, x + padIn, yy);
       });
     }
-  }, [dtValue, jalan, kota, provinsi, negara, lat, lng, style, pos, color, scale, includeMapInPhoto, mapImgVersion]);
+  }, [dtValue, jalan, kota, provinsi, negara, lat, lng, style, pos, color, scale, includeMapInPhoto, mapImgVersion, fontDef]);
 
   useEffect(() => {
     render();
@@ -292,6 +331,11 @@ export default function StempelWaktu() {
     const c = canvasRef.current;
     if (c && imgRef.current) c.toBlob((b) => { blobRef.current = b; }, "image/png");
   }, [render, photoUrl]);
+
+  // Pastikan font pilihan sudah dimuat, lalu gambar ulang.
+  useEffect(() => {
+    document.fonts?.load(`${fontDef.weight} 24px ${fontDef.css}`).then(() => setMapImgVersion((v) => v + 1)).catch(() => {});
+  }, [fontDef]);
 
   // Gambar ulang begitu font (Poppins) selesai dimuat, supaya teks di kanvas tidak tertahan di font cadangan.
   useEffect(() => {
@@ -342,7 +386,7 @@ export default function StempelWaktu() {
 
   return (
     <div style={pageStyle} className="sw-page">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap" />
+      <link rel="stylesheet" href={FONTS_HREF} />
       <style>{`
         .sw-grid{display:grid;grid-template-columns:340px 1fr;gap:20px}
         .sw-grid > *{min-width:0}
@@ -373,14 +417,29 @@ export default function StempelWaktu() {
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             />
 
-            <label style={{ ...labelStyle, marginTop: 16 }}>Waktu (dengan detik)</label>
-            <input
-              type="datetime-local"
-              step={1}
-              value={dtValue}
-              onChange={(e) => setDtValue(e.target.value)}
-              style={inputStyle}
-            />
+            <label style={{ ...labelStyle, marginTop: 16 }}>Tanggal &amp; Waktu (jam : menit : detik)</label>
+            <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} style={inputStyle} />
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+              {([["Jam", hh, setHh, 23], ["Menit", mm, setMm, 59], ["Detik", ss, setSs, 59]] as const).map(([lbl, val, setter, max], i) => (
+                <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                  {i > 0 && <span style={{ color: "#8fd8d0", fontFamily: "monospace" }}>:</span>}
+                  <input
+                    aria-label={lbl}
+                    placeholder={lbl}
+                    inputMode="numeric"
+                    maxLength={2}
+                    value={val}
+                    onChange={onTimePart(setter, max)}
+                    onBlur={() => setter(pad2(val))}
+                    onFocus={(e) => e.target.select()}
+                    style={{ ...inputStyle, textAlign: "center", padding: "9px 4px" }}
+                  />
+                </div>
+              ))}
+            </div>
+            <button style={{ ...ghostBtn, width: "100%", marginTop: 8, flex: "none" }} onClick={setNow}>
+              🕒 Pakai waktu sekarang
+            </button>
 
             <label style={{ ...labelStyle, marginTop: 16 }}>Alamat</label>
             <input style={inputStyle} placeholder="Jalan" value={jalan} onChange={(e) => setJalan(e.target.value)} />
@@ -429,6 +488,19 @@ export default function StempelWaktu() {
               {(["tl", "tr", "bl", "br"] as StampPos[]).map((p) => (
                 <button key={p} onClick={() => setPos(p)} style={optBtn(pos === p)}>
                   {{ tl: "Kiri Atas", tr: "Kanan Atas", bl: "Kiri Bawah", br: "Kanan Bawah" }[p]}
+                </button>
+              ))}
+            </div>
+
+            <label style={{ ...labelStyle, marginTop: 14 }}>Font</label>
+            <div style={optsRow}>
+              {FONTS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFontId(f.id)}
+                  style={{ ...optBtn(fontId === f.id), fontFamily: f.css, fontWeight: f.weight }}
+                >
+                  {f.label}
                 </button>
               ))}
             </div>
