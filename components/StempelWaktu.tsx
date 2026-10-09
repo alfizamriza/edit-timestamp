@@ -77,6 +77,7 @@ export default function StempelWaktu() {
   const [showMap, setShowMap] = useState(false);
   const [includeMapInPhoto, setIncludeMapInPhoto] = useState(true);
   const [mapImgVersion, setMapImgVersion] = useState(0);
+  const [saveSheetUrl, setSaveSheetUrl] = useState<string | null>(null);
 
   const [style, setStyle] = useState<StampStyle>("gps");
   const [pos, setPos] = useState<StampPos>("tr");
@@ -86,6 +87,7 @@ export default function StempelWaktu() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const mapImgRef = useRef<HTMLImageElement | null>(null);
+  const blobRef = useRef<Blob | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Ambil static map (dari /api/staticmap, same-origin) tiap kali koordinat
@@ -285,25 +287,78 @@ export default function StempelWaktu() {
 
   useEffect(() => {
     render();
+    // Siapkan file PNG lebih dulu supaya tombol Unduh/Bagikan di iPhone
+    // tidak kehilangan "izin sentuhan" karena menunggu proses async.
+    const c = canvasRef.current;
+    if (c && imgRef.current) c.toBlob((b) => { blobRef.current = b; }, "image/png");
   }, [render, photoUrl]);
 
-  const handleDownload = () => {
+  // Gambar ulang begitu font (Poppins) selesai dimuat, supaya teks di kanvas tidak tertahan di font cadangan.
+  useEffect(() => {
+    const fonts = document.fonts;
+    if (!fonts) return;
+    const bump = () => setMapImgVersion((v) => v + 1);
+    fonts.addEventListener("loadingdone", bump);
+    return () => fonts.removeEventListener("loadingdone", bump);
+  }, []);
+
+  const handleDownload = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = "stempel-waktu.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
+    const blob: Blob | null =
+      blobRef.current ?? (await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png")));
+    if (!blob) return;
+
+    const ua = navigator.userAgent;
+    const isIOS = /iP(hone|ad|od)/.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1);
+    const isMobile = isIOS || /Android/.test(ua);
+    const file = new File([blob], "stempel-waktu.png", { type: "image/png" });
+
+    // HP: pakai lembar "Bagikan" bawaan sistem -> ada pilihan "Simpan Gambar" / "Simpan ke Foto".
+    if (isMobile && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch (err) {
+        if ((err as DOMException).name === "AbortError") return; // pengguna menutup sendiri
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    // iPhone tanpa Web Share: tampilkan gambar penuh, pengguna tekan-tahan -> "Simpan ke Foto".
+    if (isIOS) {
+      setSaveSheetUrl(url);
+      return;
+    }
+    // Desktop & Android: unduh biasa.
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stempel-waktu.png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
 
   return (
-    <div style={pageStyle}>
-      <h1 style={{ fontSize: 28, marginBottom: 4, fontWeight: 700 }}>Stempel Waktu</h1>
+    <div style={pageStyle} className="sw-page">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap" />
+      <style>{`
+        .sw-grid{display:grid;grid-template-columns:340px 1fr;gap:20px}
+        .sw-grid > *{min-width:0}
+        @media (max-width:820px){
+          .sw-page{padding:14px !important}
+          .sw-grid{grid-template-columns:1fr}
+          .sw-preview{order:-1;min-height:0 !important}
+          .sw-title{font-size:22px !important}
+        }
+      `}</style>
+      <h1 className="sw-title" style={{ fontSize: 28, marginBottom: 4, fontWeight: 700 }}>Stempel Waktu</h1>
       <p style={{ fontFamily: "monospace", fontSize: 12.5, color: "#f2a93b", marginTop: 0, marginBottom: 20 }}>
         timestamp &amp; geotag — lokasi otomatis terisi posisi Anda, bisa diedit atau dipilih lewat peta
       </p>
 
-      <div style={gridStyle}>
+      <div className="sw-grid">
         <div>
           <div style={panelStyle}>
             <label style={labelStyle}>Foto</label>
@@ -404,16 +459,30 @@ export default function StempelWaktu() {
           </div>
         </div>
 
-        <div style={{ ...panelStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 420 }}>
+        <div className="sw-preview" style={{ ...panelStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 420 }}>
           {!photoUrl && <div style={{ color: "#7d8a90", fontFamily: "monospace", fontSize: 13 }}>Belum ada foto.</div>}
           <canvas ref={canvasRef} style={{ maxWidth: "100%", height: "auto", display: photoUrl ? "block" : "none" }} />
           {photoUrl && (
             <button style={{ ...mainBtnSm, marginTop: 14, width: "100%" }} onClick={handleDownload}>
-              Unduh Foto
+              Unduh / Simpan Foto
             </button>
           )}
         </div>
       </div>
+
+      {saveSheetUrl && (
+        <div
+          onClick={() => { URL.revokeObjectURL(saveSheetUrl); setSaveSheetUrl(null); }}
+          style={{ position: "fixed", inset: 0, zIndex: 1100, background: "rgba(8,14,20,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, gap: 12 }}
+        >
+          <p style={{ margin: 0, fontSize: 14, textAlign: "center", color: "#eef1ec" }}>
+            Tekan &amp; tahan gambar → pilih <b>Simpan ke Foto</b>
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={saveSheetUrl} alt="Hasil foto" style={{ maxWidth: "100%", maxHeight: "75vh", objectFit: "contain" }} onClick={(e) => e.stopPropagation()} />
+          <span style={{ fontSize: 12, color: "#8fd8d0", fontFamily: "monospace" }}>ketuk di luar gambar untuk menutup</span>
+        </div>
+      )}
 
       {showMap && (
         <MapPicker
@@ -433,10 +502,9 @@ export default function StempelWaktu() {
 }
 
 const pageStyle: CSSProperties = { maxWidth: 1160, margin: "0 auto", padding: 20, fontFamily: "system-ui, sans-serif", color: "#eef1ec", background: "#0e1b28", minHeight: "100vh" };
-const gridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "340px 1fr", gap: 20 };
 const panelStyle: CSSProperties = { background: "#132635", border: "1px solid rgba(226,232,224,0.14)", borderRadius: 2, padding: 18 };
 const labelStyle: CSSProperties = { display: "block", fontFamily: "monospace", fontSize: 11, color: "#8fd8d0", marginBottom: 6 };
-const inputStyle: CSSProperties = { width: "100%", background: "#0e1b28", border: "1px solid rgba(226,232,224,0.14)", color: "#eef1ec", padding: "9px 10px", borderRadius: 2, fontFamily: "monospace", fontSize: 13 };
+const inputStyle: CSSProperties = { width: "100%", background: "#0e1b28", border: "1px solid rgba(226,232,224,0.14)", color: "#eef1ec", padding: "9px 10px", borderRadius: 2, fontFamily: "monospace", fontSize: 16 };
 const dropStyle: CSSProperties = { width: "100%", padding: "18px 10px", background: "transparent", border: "1px dashed rgba(226,232,224,0.14)", color: "#eef1ec", textAlign: "center", fontSize: 13, cursor: "pointer" };
 const ghostBtn: CSSProperties = { flex: 1, padding: 9, background: "transparent", color: "#f2a93b", border: "1px solid #c98a2e", borderRadius: 2, cursor: "pointer", fontSize: 13 };
 const mainBtnSm: CSSProperties = { flex: 1, padding: 9, background: "#f2a93b", color: "#0e1b28", border: "none", borderRadius: 2, cursor: "pointer", fontWeight: 700, fontSize: 13 };

@@ -90,7 +90,7 @@ const overlayStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   zIndex: 1000,
-  padding: 20,
+  padding: 10,
 };
 
 const modalStyle: CSSProperties = {
@@ -130,6 +130,8 @@ const footerStyle: CSSProperties = {
   padding: "12px 16px",
   borderTop: "1px solid rgba(226,232,224,0.14)",
   color: "#eef1ec",
+  flexWrap: "wrap",
+  gap: 10,
 };
 
 const ghostBtnStyle: CSSProperties = {
