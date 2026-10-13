@@ -424,28 +424,58 @@ export default function StempelWaktu() {
     <div style={pageStyle} className="sw-page">
       <link rel="stylesheet" href={FONTS_HREF} />
       <style>{`
-        .sw-grid{display:grid;grid-template-columns:340px 1fr;gap:20px}
+        .sw-page{position:relative;overflow:hidden}
+        .sw-page:before{content:"";position:absolute;inset:10px;border:1px solid rgba(18,18,18,.08);border-radius:8px;pointer-events:none}
+        .sw-grid{display:grid;grid-template-columns:340px 1fr;gap:24px;position:relative;z-index:1}
         .sw-grid > *{min-width:0}
+        .sw-title{font-family:Georgia,"Times New Roman",serif}
+        .sw-preview canvas{border-radius:8px;box-shadow:0 34px 80px rgba(16,20,28,.16)}
         @media (max-width:820px){
           .sw-page{padding:14px !important}
           .sw-grid{grid-template-columns:1fr}
           .sw-preview{order:-1;min-height:0 !important}
-          .sw-title{font-size:22px !important}
+          .sw-title{font-size:42px !important;line-height:.95 !important}
+          .sw-subtitle{max-width:none !important}
         }
       `}</style>
       <div style={brandHeaderStyle}>
-        <NextImage src="/icon.png" alt="Stempel Waktu" width={44} height={44} style={brandIconStyle} priority />
-        <div>
-          <h1 className="sw-title" style={{ fontSize: 30, margin: 0, fontWeight: 600, letterSpacing: 0 }}>Stempel Waktu Foto GPS</h1>
-          <p style={{ fontFamily: "monospace", fontSize: 12.5, color: "#7fd8cf", marginTop: 4, marginBottom: 0 }}>
-            timestamp &amp; geotag profesional untuk dokumentasi lapangan
-          </p>
+        <div style={brandStyle}>
+          <NextImage src="/icon.png" alt="Stempel Waktu" width={34} height={34} style={brandIconStyle} priority />
+          <span>Timesramp</span>
         </div>
+        <nav style={navPillStyle} aria-label="Navigasi">
+          <a href="#foto" style={navLinkStyle}>Foto</a>
+          <a href="#waktu" style={navLinkStyle}>Waktu</a>
+          <a href="#gaya" style={navLinkStyle}>Gaya</a>
+          <a href="#hasil" style={navLinkStyle}>Hasil</a>
+        </nav>
+        <button style={darkBtn} onClick={() => fileInputRef.current?.click()}>
+          Upload foto -&gt;
+        </button>
       </div>
+
+      <section style={heroCopyStyle}>
+        <p style={eyebrowStyle}>Timestamp dan geotag online</p>
+        <h1 className="sw-title" style={heroTitleStyle}>
+          Stempel waktu
+          <span style={heroItalicStyle}>untuk foto lapangan.</span>
+        </h1>
+        <p className="sw-subtitle" style={subheadStyle}>
+          Unggah foto, ambil lokasi GPS, atur alamat, lalu simpan hasil dengan tampilan bersih seperti kamera profesional.
+        </p>
+        <div style={heroActionsStyle}>
+          <button style={darkBtn} onClick={() => fileInputRef.current?.click()}>
+            Mulai unggah -&gt;
+          </button>
+          <button style={lightBtn} onClick={useCurrentLocation}>
+            Ambil lokasi
+          </button>
+        </div>
+      </section>
 
       <div className="sw-grid">
         <div>
-          <div style={panelStyle}>
+          <div id="foto" style={panelStyle}>
             <label style={labelStyle}>Foto</label>
             <button style={dropStyle} onClick={() => fileInputRef.current?.click()}>
               Klik untuk unggah foto
@@ -458,7 +488,7 @@ export default function StempelWaktu() {
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             />
 
-            <label style={{ ...labelStyle, marginTop: 16 }}>Tanggal &amp; Waktu (jam : menit : detik)</label>
+            <label id="waktu" style={{ ...labelStyle, marginTop: 16 }}>Tanggal &amp; Waktu</label>
             <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} style={inputStyle} />
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
               {([["Jam", hh, setHh, 23], ["Menit", mm, setMm, 59], ["Detik", ss, setSs, 59]] as const).map(([lbl, val, setter, max], i) => (
@@ -514,7 +544,7 @@ export default function StempelWaktu() {
             </label>
           </div>
 
-          <div style={{ ...panelStyle, marginTop: 16 }}>
+          <div id="gaya" style={{ ...panelStyle, marginTop: 16 }}>
             <label style={labelStyle}>Gaya</label>
             <div style={optsRow}>
               {(["gps", "classic", "modern", "minimal"] as StampStyle[]).map((s) => (
@@ -573,7 +603,7 @@ export default function StempelWaktu() {
 
             <label style={{ ...labelStyle, marginTop: 14 }}>Warna aksen</label>
             <div style={{ display: "flex", gap: 8 }}>
-              {["#d9ad4f", "#4cc3b8", "#e86f51", "#6ea8fe", "#f6f2e8"].map((c) => (
+              {["#111111", "#c5ff4a", "#ff8d5c", "#7b61ff", "#2bb7a8"].map((c) => (
                 <button
                   key={c}
                   onClick={() => setColor(c)}
@@ -597,8 +627,23 @@ export default function StempelWaktu() {
           </div>
         </div>
 
-        <div className="sw-preview" style={{ ...panelStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 420 }}>
-          {!photoUrl && <div style={{ color: "#7d8a90", fontFamily: "monospace", fontSize: 13 }}>Belum ada foto.</div>}
+        <div id="hasil" className="sw-preview" style={previewStyle}>
+          <div style={floatingCardLeftStyle}>
+            <span style={miniIconStyle}>01</span>
+            <strong>Unggah foto</strong>
+            <small>Diproses langsung di browser.</small>
+          </div>
+          <div style={floatingCardRightStyle}>
+            <strong>GPS siap</strong>
+            <small>{lat !== null && lng !== null ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : "Ambil atau pilih lokasi."}</small>
+          </div>
+          {!photoUrl && (
+            <div style={emptyPreviewStyle}>
+              <NextImage src="/icon.png" alt="" width={64} height={64} style={{ opacity: 0.9 }} />
+              <strong>Belum ada foto</strong>
+              <span>Unggah gambar untuk melihat preview stempel.</span>
+            </div>
+          )}
           <canvas ref={canvasRef} style={{ maxWidth: "100%", height: "auto", display: photoUrl ? "block" : "none" }} />
           {photoUrl && (
             <button style={downloadBtn} onClick={handleDownload}>
@@ -640,22 +685,157 @@ export default function StempelWaktu() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 1180,
-  margin: "0 auto",
-  padding: 22,
-  fontFamily: "system-ui, sans-serif",
-  color: "#f6f2e8",
-  background: "linear-gradient(135deg, #101820 0%, #17313a 48%, #2c2027 100%)",
+  width: "min(1180px, calc(100% - 28px))",
+  margin: "20px auto",
+  padding: 24,
+  fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+  color: "#111111",
+  background: "#fbfaf6",
   minHeight: "100vh",
+  border: "1px solid rgba(18,18,18,0.08)",
+  borderRadius: 8,
+  boxShadow: "0 18px 52px rgba(88,111,178,0.24)",
 };
-const brandHeaderStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 14, marginBottom: 22 };
-const brandIconStyle: CSSProperties = { borderRadius: 8, boxShadow: "0 10px 28px rgba(0,0,0,0.24)", flexShrink: 0 };
-const panelStyle: CSSProperties = { background: "rgba(20,40,50,0.88)", border: "1px solid rgba(246,242,232,0.16)", borderRadius: 8, padding: 18, boxShadow: "0 18px 44px rgba(0,0,0,0.18)" };
-const labelStyle: CSSProperties = { display: "block", fontFamily: "monospace", fontSize: 11, color: "#7fd8cf", marginBottom: 6 };
-const inputStyle: CSSProperties = { width: "100%", background: "#0f1c25", border: "1px solid rgba(246,242,232,0.16)", color: "#f6f2e8", padding: "9px 10px", borderRadius: 6, fontFamily: "monospace", fontSize: 16 };
-const dropStyle: CSSProperties = { width: "100%", padding: "18px 10px", background: "rgba(15,28,37,0.7)", border: "1px dashed rgba(127,216,207,0.5)", color: "#f6f2e8", textAlign: "center", fontSize: 13, cursor: "pointer", borderRadius: 6 };
-const ghostBtn: CSSProperties = { flex: 1, padding: 9, background: "rgba(15,28,37,0.45)", color: "#d9ad4f", border: "1px solid rgba(217,173,79,0.72)", borderRadius: 6, cursor: "pointer", fontSize: 13 };
-const mainBtnSm: CSSProperties = { flex: 1, padding: 9, background: "#d9ad4f", color: "#101820", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700, fontSize: 13 };
+const brandHeaderStyle: CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  display: "grid",
+  gridTemplateColumns: "1fr auto 1fr",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 38,
+};
+const brandStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 9, fontWeight: 800, letterSpacing: -0.2 };
+const brandIconStyle: CSSProperties = { borderRadius: 8, boxShadow: "0 10px 28px rgba(0,0,0,0.12)", flexShrink: 0 };
+const navPillStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  padding: 4,
+  border: "1px solid rgba(17,17,17,0.08)",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.72)",
+  boxShadow: "0 8px 24px rgba(17,17,17,0.04)",
+};
+const navLinkStyle: CSSProperties = {
+  padding: "9px 16px",
+  color: "#171717",
+  textDecoration: "none",
+  fontSize: 12,
+  fontWeight: 700,
+};
+const heroCopyStyle: CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  maxWidth: 760,
+  margin: "0 auto 36px",
+  textAlign: "center",
+};
+const eyebrowStyle: CSSProperties = {
+  margin: "0 0 12px",
+  color: "#77736b",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: 0,
+  textTransform: "uppercase",
+};
+const heroTitleStyle: CSSProperties = {
+  fontSize: "clamp(46px, 8vw, 92px)",
+  lineHeight: 0.86,
+  fontWeight: 700,
+  letterSpacing: 0,
+};
+const heroItalicStyle: CSSProperties = { display: "block", fontStyle: "italic", fontWeight: 400 };
+const subheadStyle: CSSProperties = {
+  maxWidth: 560,
+  margin: "22px auto 0",
+  color: "#77736b",
+  fontSize: 15,
+  lineHeight: 1.45,
+};
+const heroActionsStyle: CSSProperties = { display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 22 };
+const darkBtn: CSSProperties = {
+  padding: "11px 18px",
+  background: "#101010",
+  color: "#ffffff",
+  border: "1px solid #101010",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 13,
+};
+const lightBtn: CSSProperties = {
+  padding: "11px 18px",
+  background: "rgba(255,255,255,0.68)",
+  color: "#111111",
+  border: "1px solid rgba(17,17,17,0.1)",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 13,
+};
+const panelStyle: CSSProperties = {
+  background: "rgba(255,255,255,0.76)",
+  border: "1px solid rgba(17,17,17,0.08)",
+  borderRadius: 8,
+  padding: 18,
+  boxShadow: "0 20px 50px rgba(17,17,17,0.08)",
+  backdropFilter: "blur(18px)",
+};
+const labelStyle: CSSProperties = { display: "block", fontFamily: "monospace", fontSize: 11, color: "#6f6a60", marginBottom: 6, fontWeight: 700 };
+const inputStyle: CSSProperties = { width: "100%", background: "#ffffff", border: "1px solid rgba(17,17,17,0.12)", color: "#111111", padding: "9px 10px", borderRadius: 6, fontFamily: "monospace", fontSize: 16 };
+const dropStyle: CSSProperties = { width: "100%", padding: "18px 10px", background: "#f4f1ea", border: "1px dashed rgba(17,17,17,0.22)", color: "#111111", textAlign: "center", fontSize: 13, cursor: "pointer", borderRadius: 6, fontWeight: 700 };
+const ghostBtn: CSSProperties = { flex: 1, padding: 9, background: "#ffffff", color: "#111111", border: "1px solid rgba(17,17,17,0.14)", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700 };
+const mainBtnSm: CSSProperties = { flex: 1, padding: 9, background: "#c5ff4a", color: "#111111", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 800, fontSize: 13 };
+const previewStyle: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 520,
+  padding: 24,
+};
+const emptyPreviewStyle: CSSProperties = {
+  width: "min(460px, 100%)",
+  minHeight: 320,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  borderRadius: 8,
+  border: "1px dashed rgba(17,17,17,0.16)",
+  color: "#77736b",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(244,241,234,0.72))",
+  textAlign: "center",
+};
+const floatingCardBase: CSSProperties = {
+  position: "absolute",
+  zIndex: 3,
+  width: 158,
+  minHeight: 112,
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  padding: 16,
+  borderRadius: 8,
+  background: "rgba(255,255,255,0.88)",
+  border: "1px solid rgba(17,17,17,0.08)",
+  boxShadow: "0 24px 60px rgba(17,17,17,0.1)",
+};
+const floatingCardLeftStyle: CSSProperties = { ...floatingCardBase, left: 8, top: 72, transform: "rotate(-6deg)" };
+const floatingCardRightStyle: CSSProperties = { ...floatingCardBase, right: 8, top: 128, transform: "rotate(7deg)" };
+const miniIconStyle: CSSProperties = {
+  width: 28,
+  height: 28,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: "50%",
+  background: "#c5ff4a",
+  fontSize: 11,
+  fontWeight: 900,
+};
 const downloadBtn: CSSProperties = {
   marginTop: 14,
   alignSelf: "flex-end",
@@ -663,31 +843,31 @@ const downloadBtn: CSSProperties = {
   minWidth: 180,
   maxWidth: "100%",
   padding: "9px 14px",
-  background: "#d9ad4f",
-  color: "#101820",
+  background: "#101010",
+  color: "#ffffff",
   border: "none",
-  borderRadius: 6,
+  borderRadius: 999,
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
   fontSize: 13,
 };
 const optsRow: CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap" };
 const toggleRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, cursor: "pointer" };
 const switchTrack = (on: boolean): CSSProperties => ({
-  width: 38, height: 20, borderRadius: 999, background: on ? "#d9ad4f" : "rgba(246,242,232,0.18)",
+  width: 38, height: 20, borderRadius: 999, background: on ? "#c5ff4a" : "rgba(17,17,17,0.14)",
   position: "relative", display: "inline-block", transition: "background 0.15s ease", flexShrink: 0,
 });
 const switchThumb = (on: boolean): CSSProperties => ({
   position: "absolute", top: 2, left: on ? 20 : 2, width: 16, height: 16, borderRadius: "50%",
-  background: on ? "#101820" : "#f6f2e8", transition: "left 0.15s ease",
+  background: on ? "#111111" : "#ffffff", transition: "left 0.15s ease",
 });
 const optBtn = (active: boolean): CSSProperties => ({
   padding: "7px 11px",
   fontSize: 12,
-  background: active ? "#d9ad4f" : "#0f1c25",
-  color: active ? "#101820" : "#d8e2df",
-  border: `1px solid ${active ? "#d9ad4f" : "rgba(246,242,232,0.16)"}`,
+  background: active ? "#111111" : "#ffffff",
+  color: active ? "#ffffff" : "#2e2c28",
+  border: `1px solid ${active ? "#111111" : "rgba(17,17,17,0.12)"}`,
   borderRadius: 6,
   cursor: "pointer",
-  fontWeight: active ? 700 : 400,
+  fontWeight: active ? 800 : 600,
 });
