@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 import dynamic from "next/dynamic";
+import NextImage from "next/image";
 import "leaflet/dist/leaflet.css";
 
 const MapPicker = dynamic(() => import("./MapPicker"), { ssr: false });
@@ -11,6 +12,7 @@ type StampStyle = "gps" | "classic" | "modern" | "minimal";
 type StampPos = "tl" | "tr" | "bl" | "br";
 
 const FONTS = [
+  { id: "arialmtlight", label: "Arial MT Light", css: '"Arial MT Light", Arial, sans-serif', weight: 300 },
   { id: "poppins", label: "Poppins", css: '"Poppins", sans-serif', weight: 700 },
   { id: "roboto", label: "Roboto", css: '"Roboto", sans-serif', weight: 700 },
   { id: "system", label: "Sistem (iPhone/Android)", css: 'system-ui, -apple-system, "Segoe UI", sans-serif', weight: 700 },
@@ -45,7 +47,7 @@ function toDMS(v: number | null, posDir: string, negDir: string): string | null 
   const deg = Math.floor(abs);
   const minFloat = (abs - deg) * 60;
   const min = Math.floor(minFloat);
-  const sec = Math.round((minFloat - min) * 60);
+  const sec = ((minFloat - min) * 60).toFixed(3).replace(/\.?0+$/, "");
   return `${dir} ${deg}\u00B0 ${min}' ${sec}"`;
 }
 
@@ -59,13 +61,13 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath();
 }
 
-function wrapLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+function wrapLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, letterSpacing = 0) {
   const words = text.split(" ");
   const out: string[] = [];
   let cur = "";
   words.forEach((w) => {
     const test = cur ? cur + " " + w : w;
-    if (ctx.measureText(test).width > maxWidth && cur) {
+    if (measureText(ctx, test, letterSpacing) > maxWidth && cur) {
       out.push(cur);
       cur = w;
     } else {
@@ -74,6 +76,33 @@ function wrapLine(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   });
   if (cur) out.push(cur);
   return out;
+}
+
+function measureText(ctx: CanvasRenderingContext2D, text: string, letterSpacing: number) {
+  if (letterSpacing <= 0 || text.length < 2) return ctx.measureText(text).width;
+  const chars = Array.from(text);
+  return chars.reduce((total, char) => total + ctx.measureText(char).width, 0) + letterSpacing * (chars.length - 1);
+}
+
+function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, letterSpacing: number) {
+  if (letterSpacing <= 0 || text.length < 2) {
+    ctx.fillText(text, x, y);
+    return;
+  }
+
+  const chars = Array.from(text);
+  const align = ctx.textAlign;
+  const totalWidth = measureText(ctx, text, letterSpacing);
+  let cursorX = x;
+  if (align === "right" || align === "end") cursorX = x - totalWidth;
+  else if (align === "center") cursorX = x - totalWidth / 2;
+
+  ctx.textAlign = "left";
+  chars.forEach((char) => {
+    ctx.fillText(char, cursorX, y);
+    cursorX += ctx.measureText(char).width + letterSpacing;
+  });
+  ctx.textAlign = align;
 }
 
 export default function StempelWaktu() {
@@ -112,15 +141,17 @@ export default function StempelWaktu() {
   const [lng, setLng] = useState<number | null>(null);
   const [locating, setLocating] = useState(false);
   const [showMap, setShowMap] = useState(false);
-  const [includeMapInPhoto, setIncludeMapInPhoto] = useState(true);
+  const [includeMapInPhoto, setIncludeMapInPhoto] = useState(false);
   const [mapImgVersion, setMapImgVersion] = useState(0);
   const [saveSheetUrl, setSaveSheetUrl] = useState<string | null>(null);
 
   const [style, setStyle] = useState<StampStyle>("gps");
   const [pos, setPos] = useState<StampPos>("tr");
-  const [color, setColor] = useState("#f2a93b");
-  const [scale, setScale] = useState(1);
-  const [fontId, setFontId] = useState<FontId>("poppins");
+  const [color, setColor] = useState("#d9ad4f");
+  const [scale, setScale] = useState(1.45);
+  const [letterSpacing, setLetterSpacing] = useState(1.5);
+  const [showShadow, setShowShadow] = useState(false);
+  const [fontId, setFontId] = useState<FontId>("arialmtlight");
   const fontDef = FONTS.find((f) => f.id === fontId) ?? FONTS[0];
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -226,7 +257,8 @@ export default function StempelWaktu() {
     ).filter(Boolean) as string[];
 
     const base = canvas.width / 1000;
-    const margin = Math.round(20 * base);
+    const margin = Math.round((style === "gps" ? 48 : 20) * base);
+    const letterSpacingPx = letterSpacing * base * scale;
 
     if (style === "gps") {
       const fs = Math.round(24 * base * scale);
@@ -235,7 +267,7 @@ export default function StempelWaktu() {
       ctx.textBaseline = "top";
       const maxWidth = canvas.width * 0.62;
       const wrapped: string[] = [];
-      lines.forEach((l) => wrapLine(ctx, l, maxWidth).forEach((w) => wrapped.push(w)));
+      lines.forEach((l) => wrapLine(ctx, l, maxWidth, letterSpacingPx).forEach((w) => wrapped.push(w)));
 
       const alignRight = pos === "tr" || pos === "br";
       const alignTop = pos === "tl" || pos === "tr";
@@ -264,12 +296,14 @@ export default function StempelWaktu() {
       const textX = alignRight ? canvas.width - margin : margin;
       let y = groupY + mapSize + mapGap;
 
-      ctx.shadowColor = "rgba(0,0,0,0.6)";
-      ctx.shadowBlur = Math.round(6 * base);
-      ctx.shadowOffsetY = Math.round(2 * base);
+      if (showShadow) {
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = Math.round(6 * base);
+        ctx.shadowOffsetY = Math.round(2 * base);
+      }
       ctx.fillStyle = "#ffffff";
       wrapped.forEach((l) => {
-        ctx.fillText(l, textX, y);
+        drawText(ctx, l, textX, y, letterSpacingPx);
         y += lineGap;
       });
       ctx.shadowColor = "transparent";
@@ -284,7 +318,7 @@ export default function StempelWaktu() {
     const lineGap = Math.round(fs * 1.35);
     ctx.font = `${fontDef.weight} ${fs}px ${fontDef.css}`;
     ctx.textBaseline = "top";
-    const widths = lines.map((l) => ctx.measureText(l).width);
+    const widths = lines.map((l) => measureText(ctx, l, letterSpacingPx));
     const boxW = Math.max(...widths) + padIn * 2;
     const boxH = lines.length * lineGap + padIn * 1.6;
 
@@ -302,7 +336,7 @@ export default function StempelWaktu() {
       ctx.strokeRect(x + 2, y + 2, boxW - 4, boxH - 4);
       lines.forEach((l, i) => {
         ctx.fillStyle = i === 0 ? color : "#eef1ec";
-        ctx.fillText(l, x + padIn, y + padIn * 0.8 + i * lineGap);
+        drawText(ctx, l, x + padIn, y + padIn * 0.8 + i * lineGap, letterSpacingPx);
       });
     } else if (style === "modern") {
       ctx.fillStyle = "rgba(14,27,40,0.72)";
@@ -311,18 +345,20 @@ export default function StempelWaktu() {
       ctx.fillRect(x, y, Math.round(4 * base), boxH);
       lines.forEach((l, i) => {
         ctx.fillStyle = i === 0 ? color : "#f4f6f2";
-        ctx.fillText(l, x + padIn + Math.round(8 * base), y + padIn * 0.8 + i * lineGap);
+        drawText(ctx, l, x + padIn + Math.round(8 * base), y + padIn * 0.8 + i * lineGap, letterSpacingPx);
       });
     } else {
       lines.forEach((l, i) => {
         const yy = y + padIn * 0.8 + i * lineGap;
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillText(l, x + padIn + base, yy + base);
+        if (showShadow) {
+          ctx.fillStyle = "rgba(0,0,0,0.55)";
+          drawText(ctx, l, x + padIn + base, yy + base, letterSpacingPx);
+        }
         ctx.fillStyle = i === 0 ? color : "#ffffff";
-        ctx.fillText(l, x + padIn, yy);
+        drawText(ctx, l, x + padIn, yy, letterSpacingPx);
       });
     }
-  }, [dtValue, jalan, kota, provinsi, negara, lat, lng, style, pos, color, scale, includeMapInPhoto, mapImgVersion, fontDef]);
+  }, [dtValue, jalan, kota, provinsi, negara, lat, lng, style, pos, color, scale, letterSpacing, showShadow, includeMapInPhoto, mapImgVersion, fontDef]);
 
   useEffect(() => {
     render();
@@ -397,10 +433,15 @@ export default function StempelWaktu() {
           .sw-title{font-size:22px !important}
         }
       `}</style>
-      <h1 className="sw-title" style={{ fontSize: 28, marginBottom: 4, fontWeight: 700 }}>Stempel Waktu</h1>
-      <p style={{ fontFamily: "monospace", fontSize: 12.5, color: "#f2a93b", marginTop: 0, marginBottom: 20 }}>
-        timestamp &amp; geotag — lokasi otomatis terisi posisi Anda, bisa diedit atau dipilih lewat peta
-      </p>
+      <div style={brandHeaderStyle}>
+        <NextImage src="/icon.png" alt="Stempel Waktu" width={44} height={44} style={brandIconStyle} priority />
+        <div>
+          <h1 className="sw-title" style={{ fontSize: 30, margin: 0, fontWeight: 600, letterSpacing: 0 }}>Stempel Waktu Foto GPS</h1>
+          <p style={{ fontFamily: "monospace", fontSize: 12.5, color: "#7fd8cf", marginTop: 4, marginBottom: 0 }}>
+            timestamp &amp; geotag profesional untuk dokumentasi lapangan
+          </p>
+        </div>
+      </div>
 
       <div className="sw-grid">
         <div>
@@ -505,9 +546,34 @@ export default function StempelWaktu() {
               ))}
             </div>
 
+            <label style={{ ...labelStyle, marginTop: 14 }}>Jarak huruf ({letterSpacing}px)</label>
+            <input
+              type="range"
+              min={0}
+              max={8}
+              step={0.5}
+              value={letterSpacing}
+              onChange={(e) => setLetterSpacing(Number(e.target.value))}
+              style={{ width: "100%" }}
+            />
+
+            <label style={toggleRowStyle}>
+              <span style={{ fontFamily: "monospace", fontSize: 12, color: "#c7d0d4" }}>
+                Bayangan teks
+              </span>
+              <span
+                onClick={() => setShowShadow((v) => !v)}
+                style={switchTrack(showShadow)}
+                role="switch"
+                aria-checked={showShadow}
+              >
+                <span style={switchThumb(showShadow)} />
+              </span>
+            </label>
+
             <label style={{ ...labelStyle, marginTop: 14 }}>Warna aksen</label>
             <div style={{ display: "flex", gap: 8 }}>
-              {["#f2a93b", "#8fd8d0", "#e2604f", "#ffffff"].map((c) => (
+              {["#d9ad4f", "#4cc3b8", "#e86f51", "#6ea8fe", "#f6f2e8"].map((c) => (
                 <button
                   key={c}
                   onClick={() => setColor(c)}
@@ -535,7 +601,7 @@ export default function StempelWaktu() {
           {!photoUrl && <div style={{ color: "#7d8a90", fontFamily: "monospace", fontSize: 13 }}>Belum ada foto.</div>}
           <canvas ref={canvasRef} style={{ maxWidth: "100%", height: "auto", display: photoUrl ? "block" : "none" }} />
           {photoUrl && (
-            <button style={{ ...mainBtnSm, marginTop: 14, width: "100%" }} onClick={handleDownload}>
+            <button style={downloadBtn} onClick={handleDownload}>
               Unduh / Simpan Foto
             </button>
           )}
@@ -573,30 +639,55 @@ export default function StempelWaktu() {
   );
 }
 
-const pageStyle: CSSProperties = { maxWidth: 1160, margin: "0 auto", padding: 20, fontFamily: "system-ui, sans-serif", color: "#eef1ec", background: "#0e1b28", minHeight: "100vh" };
-const panelStyle: CSSProperties = { background: "#132635", border: "1px solid rgba(226,232,224,0.14)", borderRadius: 2, padding: 18 };
-const labelStyle: CSSProperties = { display: "block", fontFamily: "monospace", fontSize: 11, color: "#8fd8d0", marginBottom: 6 };
-const inputStyle: CSSProperties = { width: "100%", background: "#0e1b28", border: "1px solid rgba(226,232,224,0.14)", color: "#eef1ec", padding: "9px 10px", borderRadius: 2, fontFamily: "monospace", fontSize: 16 };
-const dropStyle: CSSProperties = { width: "100%", padding: "18px 10px", background: "transparent", border: "1px dashed rgba(226,232,224,0.14)", color: "#eef1ec", textAlign: "center", fontSize: 13, cursor: "pointer" };
-const ghostBtn: CSSProperties = { flex: 1, padding: 9, background: "transparent", color: "#f2a93b", border: "1px solid #c98a2e", borderRadius: 2, cursor: "pointer", fontSize: 13 };
-const mainBtnSm: CSSProperties = { flex: 1, padding: 9, background: "#f2a93b", color: "#0e1b28", border: "none", borderRadius: 2, cursor: "pointer", fontWeight: 700, fontSize: 13 };
+const pageStyle: CSSProperties = {
+  maxWidth: 1180,
+  margin: "0 auto",
+  padding: 22,
+  fontFamily: "system-ui, sans-serif",
+  color: "#f6f2e8",
+  background: "linear-gradient(135deg, #101820 0%, #17313a 48%, #2c2027 100%)",
+  minHeight: "100vh",
+};
+const brandHeaderStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 14, marginBottom: 22 };
+const brandIconStyle: CSSProperties = { borderRadius: 8, boxShadow: "0 10px 28px rgba(0,0,0,0.24)", flexShrink: 0 };
+const panelStyle: CSSProperties = { background: "rgba(20,40,50,0.88)", border: "1px solid rgba(246,242,232,0.16)", borderRadius: 8, padding: 18, boxShadow: "0 18px 44px rgba(0,0,0,0.18)" };
+const labelStyle: CSSProperties = { display: "block", fontFamily: "monospace", fontSize: 11, color: "#7fd8cf", marginBottom: 6 };
+const inputStyle: CSSProperties = { width: "100%", background: "#0f1c25", border: "1px solid rgba(246,242,232,0.16)", color: "#f6f2e8", padding: "9px 10px", borderRadius: 6, fontFamily: "monospace", fontSize: 16 };
+const dropStyle: CSSProperties = { width: "100%", padding: "18px 10px", background: "rgba(15,28,37,0.7)", border: "1px dashed rgba(127,216,207,0.5)", color: "#f6f2e8", textAlign: "center", fontSize: 13, cursor: "pointer", borderRadius: 6 };
+const ghostBtn: CSSProperties = { flex: 1, padding: 9, background: "rgba(15,28,37,0.45)", color: "#d9ad4f", border: "1px solid rgba(217,173,79,0.72)", borderRadius: 6, cursor: "pointer", fontSize: 13 };
+const mainBtnSm: CSSProperties = { flex: 1, padding: 9, background: "#d9ad4f", color: "#101820", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 700, fontSize: 13 };
+const downloadBtn: CSSProperties = {
+  marginTop: 14,
+  alignSelf: "flex-end",
+  width: "auto",
+  minWidth: 180,
+  maxWidth: "100%",
+  padding: "9px 14px",
+  background: "#d9ad4f",
+  color: "#101820",
+  border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 13,
+};
 const optsRow: CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap" };
 const toggleRowStyle: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, cursor: "pointer" };
 const switchTrack = (on: boolean): CSSProperties => ({
-  width: 38, height: 20, borderRadius: 999, background: on ? "#f2a93b" : "rgba(226,232,224,0.18)",
+  width: 38, height: 20, borderRadius: 999, background: on ? "#d9ad4f" : "rgba(246,242,232,0.18)",
   position: "relative", display: "inline-block", transition: "background 0.15s ease", flexShrink: 0,
 });
 const switchThumb = (on: boolean): CSSProperties => ({
   position: "absolute", top: 2, left: on ? 20 : 2, width: 16, height: 16, borderRadius: "50%",
-  background: on ? "#0e1b28" : "#eef1ec", transition: "left 0.15s ease",
+  background: on ? "#101820" : "#f6f2e8", transition: "left 0.15s ease",
 });
 const optBtn = (active: boolean): CSSProperties => ({
   padding: "7px 11px",
   fontSize: 12,
-  background: active ? "#f2a93b" : "#0e1b28",
-  color: active ? "#0e1b28" : "#c7d0d4",
-  border: `1px solid ${active ? "#f2a93b" : "rgba(226,232,224,0.14)"}`,
-  borderRadius: 2,
+  background: active ? "#d9ad4f" : "#0f1c25",
+  color: active ? "#101820" : "#d8e2df",
+  border: `1px solid ${active ? "#d9ad4f" : "rgba(246,242,232,0.16)"}`,
+  borderRadius: 6,
   cursor: "pointer",
   fontWeight: active ? 700 : 400,
 });
