@@ -38,10 +38,90 @@ export default function MapPicker({ initialLat, initialLng, onConfirm, onClose }
   const center: LatLngExpression = [initialLat, initialLng];
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
-        <div style={headerStyle}>
-          <span>Pilih Lokasi — klik peta, geser pin, atau zoom untuk memperjelas</span>
+    <div className="mp-overlay">
+      <style>{`
+        .mp-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(8, 14, 20, 0.75);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 16px;
+        }
+        .mp-modal {
+          width: min(720px, 100%);
+          height: min(560px, 88vh);
+          background: #0e1b28;
+          border: 1px solid rgba(226, 232, 224, 0.16);
+          border-radius: 12px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+        }
+        .mp-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 14px 18px;
+          border-bottom: 1px solid rgba(226, 232, 224, 0.12);
+          background: #112132;
+        }
+        .mp-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 14px 18px;
+          border-top: 1px solid rgba(226, 232, 224, 0.12);
+          background: #112132;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .mp-footer-btns {
+          display: flex;
+          gap: 10px;
+        }
+        @media (max-width: 640px) {
+          .mp-overlay {
+            padding: 0;
+            align-items: flex-end;
+          }
+          .mp-modal {
+            width: 100%;
+            height: 92vh;
+            border-radius: 20px 20px 0 0;
+            border-bottom: none;
+          }
+          .mp-header {
+            padding: 12px 16px;
+          }
+          .mp-footer {
+            padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+          }
+          .mp-footer-btns {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+          }
+          .mp-footer-btns button {
+            flex: 1;
+          }
+        }
+      `}</style>
+      <div className="mp-modal">
+        <div className="mp-header">
+          <div>
+            <div style={{ color: "#f4f6f2", fontWeight: 700, fontSize: 14 }}>Pilih Lokasi GPS</div>
+            <div style={{ color: "#8fd8d0", fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
+              Ketuk peta atau seret pin
+            </div>
+          </div>
           <button onClick={onClose} style={closeBtnStyle} aria-label="Tutup">✕</button>
         </div>
 
@@ -66,11 +146,12 @@ export default function MapPicker({ initialLat, initialLng, onConfirm, onClose }
           </MapContainer>
         </div>
 
-        <div style={footerStyle}>
-          <span style={{ fontFamily: "monospace", fontSize: 13 }}>
-            {pos.lat.toFixed(6)}, {pos.lng.toFixed(6)}
-          </span>
-          <div style={{ display: "flex", gap: 10 }}>
+        <div className="mp-footer">
+          <div style={{ fontFamily: "monospace", fontSize: 12, color: "#c7d0d4", background: "rgba(255,255,255,0.06)", padding: "6px 10px", borderRadius: 6, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span>📍</span>
+            <span>{pos.lat.toFixed(6)}, {pos.lng.toFixed(6)}</span>
+          </div>
+          <div className="mp-footer-btns">
             <button onClick={onClose} style={ghostBtnStyle}>Batal</button>
             <button onClick={() => onConfirm(pos.lat, pos.lng)} style={confirmBtnStyle}>
               Gunakan Lokasi Ini
@@ -82,73 +163,39 @@ export default function MapPicker({ initialLat, initialLng, onConfirm, onClose }
   );
 }
 
-const overlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(8,14,20,0.7)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 1000,
-  padding: 10,
-};
-
-const modalStyle: CSSProperties = {
-  width: "min(720px, 100%)",
-  height: "min(560px, 90vh)",
-  background: "#0e1b28",
-  border: "1px solid rgba(226,232,224,0.14)",
-  borderRadius: 4,
-  display: "flex",
-  flexDirection: "column",
-  overflow: "hidden",
-};
-
-const headerStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "12px 16px",
-  color: "#eef1ec",
-  fontFamily: "monospace",
-  fontSize: 13,
-  borderBottom: "1px solid rgba(226,232,224,0.14)",
-};
-
 const closeBtnStyle: CSSProperties = {
-  background: "transparent",
+  background: "rgba(255,255,255,0.08)",
   border: "none",
   color: "#eef1ec",
-  fontSize: 16,
+  width: 32,
+  height: 32,
+  borderRadius: "50%",
+  display: "grid",
+  placeItems: "center",
+  fontSize: 14,
   cursor: "pointer",
-};
-
-const footerStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "12px 16px",
-  borderTop: "1px solid rgba(226,232,224,0.14)",
-  color: "#eef1ec",
-  flexWrap: "wrap",
-  gap: 10,
 };
 
 const ghostBtnStyle: CSSProperties = {
-  padding: "8px 14px",
+  padding: "10px 16px",
   background: "transparent",
-  border: "1px solid rgba(226,232,224,0.14)",
+  border: "1px solid rgba(226,232,224,0.2)",
   color: "#eef1ec",
-  borderRadius: 2,
+  borderRadius: 8,
   cursor: "pointer",
+  fontWeight: 600,
+  fontSize: 13,
+  minHeight: 42,
 };
 
 const confirmBtnStyle: CSSProperties = {
-  padding: "8px 14px",
-  background: "#f2a93b",
+  padding: "10px 18px",
+  background: "#c5ff4a",
   border: "none",
-  color: "#0e1b28",
-  fontWeight: 700,
-  borderRadius: 2,
+  color: "#111111",
+  fontWeight: 800,
+  fontSize: 13,
+  borderRadius: 8,
   cursor: "pointer",
+  minHeight: 42,
 };
